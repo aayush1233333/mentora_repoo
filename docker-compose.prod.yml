@@ -1,0 +1,72 @@
+version: "3.9"
+
+# ── Production Docker Compose ─────────────────────────────────────────────────
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+#
+# Differences from docker-compose.yml (dev):
+#   • Uses Gunicorn + Uvicorn workers instead of uvicorn --reload
+#   • Resource limits on all containers
+#   • Restart policies: always
+#   • Health checks on backend
+#   • Frontend built with production .env
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mentora-backend-prod
+    command: gunicorn -c gunicorn.conf.py main:app
+    ports:
+      - "8000:8000"
+    env_file: ./backend/.env
+    environment:
+      - ENV=production
+    volumes:
+      - ./ai_model:/app/ai_model:ro
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 8s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mentora-frontend-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    name: mentora-prod-net

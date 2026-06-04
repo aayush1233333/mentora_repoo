@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Users ─────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ── Sessions ──────────────────────────────────────────────────────────
+    match /sessions/{sessionId} {
+      allow read, create: if request.auth != null;
+      allow update, delete: if request.auth != null
+        && request.auth.uid == resource.data.user_id;
+
+      // Fatigue data sub-collection
+      match /fatigue_data/{entryId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid == get(/databases/$(database)/documents/sessions/$(sessionId)).data.user_id;
+      }
+    }
+
+    // ── Reports ───────────────────────────────────────────────────────────
+    match /reports/{reportId} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == resource.data.user_id;
+    }
+  }
+}

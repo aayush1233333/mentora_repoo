@@ -1,0 +1,165 @@
+name: Mentora CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  # ── Backend tests ─────────────────────────────────────────────────────────
+  backend-test:
+    name: Backend – Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov ruff
+
+      - name: Lint (ruff)
+        run: ruff check . --ignore E501
+
+      - name: Run tests
+        run: pytest tests/ -v --cov=. --cov-report=xml
+        env:
+          ENV: development
+          GOOGLE_APPLICATION_CREDENTIALS: ""
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: backend/coverage.xml
+          flags: backend
+
+  # ── Frontend build & lint ─────────────────────────────────────────────────
+  frontend-build:
+    name: Frontend – Build & Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint
+        run: npx eslint src/ --ext .js,.jsx --max-warnings 20 || true
+
+      - name: Build (production)
+        run: npm run build
+        env:
+          REACT_APP_API_URL: http://localhost:8000/api/v1
+          REACT_APP_WS_URL: ws://localhost:8000
+          REACT_APP_FIREBASE_API_KEY: placeholder
+          REACT_APP_FIREBASE_AUTH_DOMAIN: placeholder.firebaseapp.com
+          REACT_APP_FIREBASE_PROJECT_ID: placeholder
+          REACT_APP_FIREBASE_STORAGE_BUCKET: placeholder.appspot.com
+          REACT_APP_FIREBASE_MESSAGING_SENDER_ID: "123456789"
+          REACT_APP_FIREBASE_APP_ID: "1:123456789:web:abc"
+          CI: false
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/build/
+          retention-days: 7
+
+  # ── Docker build ──────────────────────────────────────────────────────────
+  docker-build:
+    name: Docker – Build Images
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-build]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ghcr.io/${{ github.repository }}/mentora-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ghcr.io/${{ github.repository }}/mentora-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Deploy to Cloud Run (optional) ────────────────────────────────────────
+  deploy:
+    name: Deploy – Google Cloud Run
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Deploy backend to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: mentora-backend
+          image: ghcr.io/${{ github.repository }}/mentora-backend:latest
+          region: us-central1
+          env_vars: |
+            ENV=production
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          secrets: |
+            GOOGLE_APPLICATION_CREDENTIALS=mentora-firebase-sa:latest
+
+      - name: Deploy frontend to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: live
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
