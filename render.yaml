@@ -1,17 +1,19 @@
 services:
   - type: web
-    runtime: docker
+    runtime: python
     name: mentora-backend
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: .
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: ENV
         value: production
       - key: WEB_CONCURRENCY
         value: 1
+      - key: PYTHONPATH
+        value: /opt/render/project/src
       - key: CORS_ORIGINS
-        value: https://your-vercel-app.vercel.app
+        value: https://mentora-app-626f7.web.app
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false
       - key: OPENAI_API_KEY
