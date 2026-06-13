@@ -116,7 +116,7 @@ jobs:
       - name: Build & push backend
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: .
           push: true
           tags: ghcr.io/${{ github.repository }}/mentora-backend:latest
           cache-from: type=gha
