@@ -3,16 +3,15 @@ Mentora – FastAPI Application Entry Point
 Run: uvicorn main:app --reload --port 8000
 Production: gunicorn -c gunicorn.conf.py main:app
 """
-
 import os
 import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
-
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import Response
 
 load_dotenv(Path(__file__).with_name(".env"))
 
@@ -57,6 +56,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Global OPTIONS handler for CORS preflight ─────────────────────────────────
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str, request: Request):
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "600",
+        }
+    )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(health.router)                                          # /health*
