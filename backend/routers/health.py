@@ -43,7 +43,7 @@ async def readiness():
 
     # Firebase check
     try:
-        from services.firebase_service import FirebaseService, _STUB_MODE
+        from services.firebase_service import _STUB_MODE
         checks["firebase"] = "stub_mode" if _STUB_MODE else "connected"
     except Exception as e:
         checks["firebase"] = f"error: {e}"
