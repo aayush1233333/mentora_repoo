@@ -51,22 +51,22 @@ class FatigueDetector:
           min_tracking_confidence=0.5,
        )
 
-        self.ear_buffer: deque = deque(maxlen=FATIGUE_WINDOW)
-        self.mar_buffer: deque = deque(maxlen=FATIGUE_WINDOW)
+       self.ear_buffer: deque = deque(maxlen=FATIGUE_WINDOW)
+       self.mar_buffer: deque = deque(maxlen=FATIGUE_WINDOW)
 
-        self._pose_estimator = HeadPoseEstimator() if _HEAD_POSE_AVAILABLE else None
+       self._pose_estimator = HeadPoseEstimator() if _HEAD_POSE_AVAILABLE else None
 
-        self.blink_counter = 0
-        self.blink_total = 0
-        self.yawn_counter = 0
-        self.yawn_total = 0
-        self._yawn_started_at: Optional[float] = None
-        self._yawn_active = False
-        self.frame_count = 0
-        self.session_start = time.time()
+       self.blink_counter = 0
+       self.blink_total = 0
+       self.yawn_counter = 0
+       self.yawn_total = 0
+       self._yawn_started_at: Optional[float] = None
+       self._yawn_active = False
+       self.frame_count = 0
+       self.session_start = time.time()
 
-        self._last_minute_blinks = deque(maxlen=300)
-        self._timestamps: deque = deque(maxlen=300)
+       self._last_minute_blinks = deque(maxlen=300)
+       self._timestamps: deque = deque(maxlen=300)
 
     @staticmethod
     def _eye_aspect_ratio(landmarks, eye_indices, w, h) -> float:
